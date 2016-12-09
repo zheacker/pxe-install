@@ -11,12 +11,13 @@ notes on setting up my PXE installer
 
 # DD-WRT config
 The router should already be configured with the LAN domain option (domainname.lan) and a static lease for the PXE server at 192.168.X.XXX
+
 * tab: services > services
      * dnsmasq           =    enable
      * local dns         =    enable
      * no dns rebind     =    enable
      * additional dnsmasq options
-          * ```
+          ```
           expand-hosts
           dhcp-boot=pxelinux.0,pixie.domainname.lan,192.168.X.XXX
           ```
@@ -27,7 +28,7 @@ The router should already be configured with the LAN domain option (domainname.l
 Now we'll setup the PXE server. This will be a small VM on the Dell box. We need to spin up the VM, install the pieces, and configure the TFTP server, as well as the PXE elements (like the boot list and the directory structure of the install media).
 
 ## general setup
-* install CentOS minimal
+*    install CentOS minimal
 * `yum install epel-release`
 * `yum update`
 * `yum install vsftpd syslinux tftp-server wget xinetd vim`
@@ -37,21 +38,21 @@ Now we'll setup the PXE server. This will be a small VM on the Dell box. We need
 ## configure tftp server via xinetd
 xinetd should be enabled but not active, will start on startup/reboot
 * `vim /etc/xinetd.d/tftp`
-*    ```
-     service tftp
-     {
-          socket type         =    dgram
-          protocol            =    udp
-          wait                =    yes
-          user                =    root
-          server              =    /usr/sbin/in.tftpd
-          server_args         =    -s /var/lib/tftpboot
-          disable             =    no
-          per_source          =    11
-          cps                 =    100 2
-          flags               =    IPv4
-     }
-     ```
+```
+service tftp
+{
+     socket type         =    dgram
+     protocol            =    udp
+     wait                =    yes
+     user                =    root
+     server              =    /usr/sbin/in.tftpd
+     server_args         =    -s /var/lib/tftpboot
+     disable             =    no
+     per_source          =    11
+     cps                 =    100 2
+     flags               =    IPv4
+}
+```
 * enable all-user access to tftpboot: `chmod 777 /var/lib/tftpboot`
 * copy all syslinux file to the tftp server root directory: `cp -r /usr/share/syslinux/* /var/lib/tftpboot`
 * each install option should have its own directory under `tftpboot/`: `mkdir /var/lib/tftpboot/centos7`
@@ -71,12 +72,14 @@ xinetd should be enabled but not active, will start on startup/reboot
      * `cp anaconda-ks.cfg /var/ftp/pub`
      * `chmod 755 /var/ftp/pub/anaconda-ks.cfg`
 
+---
+2 more commands I ran last time; pretty sure this is just a syntax validator for kickstart files
 
-     2 more commands I ran last time; pretty sure this is just a syntax validator for kickstart files
-     ```
-     yum install pykickstart -y
-     ksvalidator /var/ftp/pub/anaconda-ks.cfg
-     ```
+```
+yum install pykickstart -y
+ksvalidator /var/ftp/pub/anaconda-ks.cfg
+```
+---
 
 * VNC password to watch installation is "Jarvis"
 * new host's root password is my_num.Guy
