@@ -1,0 +1,14 @@
+default menu.c32
+prompt 0
+timeout 100
+ONTIMEOUT 1
+
+menu title ########## PiXiE Boot Menu ##########
+
+label 1
+menu label ^1) Install CentOS 7 Minimal
+kernel /centos7/vmlinuz
+append initrd=/centos7/initrd.img inst.ks=ftp://192.168.1.141/pub/anaconda-ks.cfg inst.vnc inst.vncpassword=Jarvis
+
+label 2
+menu label ^2) Fuck off...
