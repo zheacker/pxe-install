@@ -2,12 +2,51 @@
 notes on setting up my PXE installer
 
 # Outline of the PXE boot process
-1. must install with 1GB of RAM (of virtualized hardware)
-2. new host comes online, asks for DHCP service
-3. DHCP (handled by dnsmasq on the router) responds with an IP address AND the location of a boot file (via the `dhcp-boot` option for dnsmasq) which is served up on a TFTP server on the PXE server machine
-4. the new host now has its IP address, then loads the boot file from 2 (the file is `pxelinux.0`, located at **the root** of the TFTP server)
-5. the pxelinux.0 boot file reads the pxe config file (called default in this simple setup). The default config file points to a kernel file and an initrd.img file, both located on our TFTP server (on Pixie)
-6. I'm not 100% certain how the next few steps work, but I assume the kernel and initrd files (from step 4) are loaded as a temporary OS, and the default PXE config file points the new client to the FTP server, which contains all of the boot media from the .iso. The temporary OS then installs the OS from this FTP server.
+1. Must install with 1GB of RAM (of virtualized hardware).
+2. New host comes online, asks for DHCP service.
+3. DHCP (handled by dnsmasq on the router) responds with an IP address AND the location of a boot file (via the `dhcp-boot` option for dnsmasq) which is served up on a TFTP server on the PXE server machine. This boot file comes from the syslinux package; its job is to then point to the actual installation media for our OS, which is hosted on the FTP server elsewhere.
+4. The new host now has its IP address, then loads the boot file from 2 (the file is `pxelinux.0`, located at **the root** of the TFTP server).
+5. The pxelinux.0 boot file reads the pxe config file (called `default` in this simple setup). The default config file contains multiple menu entries, each pertaining to a different installation source/method. A given menu entry in this file points to a kernel and an initrd.img file, both located on the TFTP server and within the OS subdirectory.
+6. The boot menu entry that we select also points to a kickstart file on the FTP server. This kickstart file will guide the installation.
+7. The kickstart file, in turn, points to the location of all the other supporting installation media. In this example, that media will reside in the FTP server OS subdirectory (in fact, it's right alongside the kickstart file itself).
+
+## Let's try that explanation again...
+1. A new host, our client, comes online and asks for DHCP service.
+2. DNSmasq--on the router--responds with IP address AND directions to the TFTP server (on the PXE install server).
+3. The client finds the TFTP server on the PXE server and locates `pxelinux.0` file at **the root** of the TFTP server
+4. `pxelinux.0` reads the `default` file from `pxelinux.cfg/`
+5. `default` offers entries for each installable OS. The entries point to the appropriate kernel and initrd files on the TFTP server, and also to the appropriate kickstart file on the FTP server. (These entries also setup VNC to observe the install.)
+6. The kernel and initrd files from the the TFTP server are loaded (temporary root file system to facilitate installation).
+7. The kickstart file points to the `OS#_install_media` on the FTP server, and also manages the installation process.
+8. That's it. The OS gets installed according to the process in the kickstart file and then you have an OS. Bam.
+
+
+```
+# TFTP directory structure
+
+/var/lib/tftpboot/
+         |---pxelinux.0
+         |---pxelinux.cfg/
+         |   `--default
+         |---OS1/
+         |   |---vmlinuz
+         |   `---initrd.img
+         |---OS2/
+             |---vmlinuz
+             `---initrd.img
+```
+
+```
+# FTP directory structure
+
+/var/ftp/pub/
+         |---OS1/
+         |   |---OS1_kickstart
+         |   `---OS1_install_media
+         |---OS2/
+             |---OS2_kickstart
+             `---OS2_install_media
+```
 
 # DD-WRT config
 The router should already be configured with the LAN domain option (domainname.lan) and a static lease for the PXE server at 192.168.X.XXX
