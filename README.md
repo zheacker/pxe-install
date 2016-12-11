@@ -1,36 +1,31 @@
-# pxe-install
-notes on setting up my PXE installer
+# pxe network install server
+So you want to host a network installation server. Here's a quick walkthrough of how I set mine up. My PXE server is running on a CentOS 7 Minimal VM, and it serves up an image of CentOS 7 Minimal on the network (for my own little clone army of VMs). I'm also using a DD-WRT router with DNSmasq for DHCP requests.
 
-# Outline of the PXE boot process
-1. Must install with 1GB of RAM (of virtualized hardware).
-2. New host comes online, asks for DHCP service.
-3. DHCP (handled by dnsmasq on the router) responds with an IP address AND the location of a boot file (via the `dhcp-boot` option for dnsmasq) which is served up on a TFTP server on the PXE server machine. This boot file comes from the syslinux package; its job is to then point to the actual installation media for our OS, which is hosted on the FTP server elsewhere.
-4. The new host now has its IP address, then loads the boot file from 2 (the file is `pxelinux.0`, located at **the root** of the TFTP server).
-5. The pxelinux.0 boot file reads the pxe config file (called `default` in this simple setup). The default config file contains multiple menu entries, each pertaining to a different installation source/method. A given menu entry in this file points to a kernel and an initrd.img file, both located on the TFTP server and within the OS subdirectory.
-6. The boot menu entry that we select also points to a kickstart file on the FTP server. This kickstart file will guide the installation.
-7. The kickstart file, in turn, points to the location of all the other supporting installation media. In this example, that media will reside in the FTP server OS subdirectory (in fact, it's right alongside the kickstart file itself).
+There are lots of options for how to build this system out, particularly regarding how you serve the installation media itself (NFS, HTTP, FTP, etc.). I went with FTP, but there are plenty of guides online for other methods.
 
-## Let's try that explanation again...
+## Outline of the PXE boot process
 1. A new host, our client, comes online and asks for DHCP service.
-2. DNSmasq--on the router--responds with IP address AND directions to the TFTP server (on the PXE install server).
-3. The client finds the TFTP server on the PXE server and locates `pxelinux.0` file at **the root** of the TFTP server
+2. DNSmasq--on the router--responds with IP address AND the location of the TFTP server (on the PXE install server).
+     - The dnsmasq option `dhcp-boot` provides this information
+3. The client finds the TFTP server on the PXE server and locates `pxelinux.0` file at **the root** of the TFTP server.
+     - The `pxelinux.0` boot loader is part of the syslinux package; syslinux must be installed and all contents of `/usr/share/syslinux/` copied to the root of the TFTP server.
 4. `pxelinux.0` reads the `default` file from `pxelinux.cfg/`
 5. `default` offers entries for each installable OS. The entries point to the appropriate kernel and initrd files on the TFTP server, and also to the appropriate kickstart file on the FTP server. (These entries also setup VNC to observe the install.)
-6. The kernel and initrd files from the the TFTP server are loaded (temporary root file system to facilitate installation).
+6. The kernel and initrd files from the the TFTP server are loaded (as the temporary root file system to facilitate installation).
 7. The kickstart file points to the `OS#_install_media` on the FTP server, and also manages the installation process.
 8. That's it. The OS gets installed according to the process in the kickstart file and then you have an OS. Bam.
 
-
+Example directory structures for TFTP and FTP servers:
 ```
 # TFTP directory structure
 
 /var/lib/tftpboot/
-         |---pxelinux.0
+         |---pxelinux.0       # syslinux boot loader
          |---pxelinux.cfg/
-         |   `--default
+         |   `--default       # pxelinux boot menu file
          |---OS1/
-         |   |---vmlinuz
-         |   `---initrd.img
+         |   |---vmlinuz      # kernel
+         |   `---initrd.img   # ramdisk
          |---OS2/
              |---vmlinuz
              `---initrd.img
@@ -48,35 +43,47 @@ notes on setting up my PXE installer
              `---OS2_install_media
 ```
 
-# DD-WRT config
-The router should already be configured with the LAN domain option (domainname.lan) and a static lease for the PXE server at 192.168.X.XXX
+## DD-WRT config
+My router is configured with the LAN domain option (domainname.lan) and a static lease for the PXE server at 192.168.X.XXX. To set these options, log into your router's web control panel:
 
-* tab: services > services
+* Under the services > services tab:
+     * LAN Domain        =    domainname.lan
+     * static leases:         assign your PXE host a static IP, let's say 192.168.4.20
      * dnsmasq           =    enable
      * local dns         =    enable
      * no dns rebind     =    enable
      * additional dnsmasq options
           ```
           expand-hosts
-          dhcp-boot=pxelinux.0,pixie.domainname.lan,192.168.X.XXX
+          dhcp-boot=pxelinux.0,pxehost.domainname.lan,192.168.4.20
           ```
-          * **NOTE**: the dhcp-boot option does not seem to like absolute paths; it needs to be pointed at the TFTP server root folder (`/var/lib/tftpboot` in this case), and it only wants the filename in the boot option (`pxelinux.0`)
-          * **NOTE 2**: I did not use the pxe-prompt or pxe-service options; don't fully understand how they mesh with the pxe options specified in the `pxelinux.cfg/default` file
+          * **NOTE**: the dhcp-boot option does not like absolute paths; it expects the boot loader file (`pxelinux.0`) to be located at the root of the TFTP server at the given address
+          * **NOTE 2**: I did not use the pxe-prompt or pxe-service options; don't fully understand how they mesh with the pxe options specified in the `pxelinux.cfg/default` file. If anyone cares to explain those, I'm all ears...
 
-# PXE server config
-Now we'll setup the PXE server. This will be a small VM on the Dell box. We need to spin up the VM, install the pieces, and configure the TFTP server, as well as the PXE elements (like the boot list and the directory structure of the install media).
+## PXE server config
+Now we'll configure the PXE server. This is `pxehost.domainname.lan` at 192.168.4.20. We need to configure the TFTP server, as well as the PXE elements (like the boot list and the directory structure of the install media).
 
-## general setup
-*    install CentOS minimal
-* `yum install epel-release`
-* `yum update`
-* `yum install vsftpd syslinux tftp-server wget xinetd vim`
-* `setenforce 0`
-* download CentOS DVD image with `wget`
+### general setup
+Let's update the system and install all the pieces.
 
-## configure tftp server via xinetd
-xinetd should be enabled but not active, will start on startup/reboot
-* `vim /etc/xinetd.d/tftp`
+```
+yum update
+yum install tftp-server vsftpd syslinux xinetd wget vim
+setenforce 0
+wget -o url.of.netinstall.iso /tmp/
+```
+
+### configure tftp server via xinetd
+Let's make sure xinetd and vsftpd are both up and running.
+```
+systemctl enable xinetd vsftpd
+systemctl start xinetd vsftpd
+```
+
+Now we need to edit the TFTP config file. I'm using vim here.
+
+`vim /etc/xinetd.d/tftp`
+
 ```
 service tftp
 {
@@ -92,6 +99,7 @@ service tftp
      flags               =    IPv4
 }
 ```
+
 * enable all-user access to tftpboot: `chmod 777 /var/lib/tftpboot`
 * copy all syslinux file to the tftp server root directory: `cp -r /usr/share/syslinux/* /var/lib/tftpboot`
 * each install option should have its own directory under `tftpboot/`: `mkdir /var/lib/tftpboot/centos7`
