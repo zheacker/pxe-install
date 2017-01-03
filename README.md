@@ -70,7 +70,7 @@ Let's update the system and install all the pieces.
 yum update
 yum install tftp-server vsftpd syslinux xinetd wget vim
 setenforce 0
-wget -o url.of.netinstall.iso /tmp/
+wget -O /tmp/name.iso url.of.netinstall.iso
 ```
 
 ### configure tftp server via xinetd
@@ -116,8 +116,8 @@ service tftp
 * `systemctl restart xinetd vsftpd`
 * `systemctl status xinetd vsftpd`
 * copy kickstart file to FTP server:
-     * `cp anaconda-ks.cfg /var/ftp/pub`
-     * `chmod 755 /var/ftp/pub/anaconda-ks.cfg`
+     * `cp anaconda-ks.cfg /var/ftp/pub/OSdir`
+     * `chmod 755 /var/ftp/pub/OSdir/anaconda-ks.cfg`
 
 ---
 2 more commands I ran last time; pretty sure this is just a syntax validator for kickstart files
